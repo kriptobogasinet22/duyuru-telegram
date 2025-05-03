@@ -1,55 +1,112 @@
 "use client"
 
 import * as React from "react"
-import * as TabsPrimitive from "@radix-ui/react-tabs"
 
-import { cn } from "@/lib/utils"
+// Tabs bileşeni için basit bir implementasyon
+// Radix UI'ın TabsPrimitive'ini taklit eder
 
-const Tabs = TabsPrimitive.Root
+interface TabsProps {
+  value: string
+  onValueChange: (value: string) => void
+  children: React.ReactNode
+  className?: string
+}
 
-const TabsList = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn(
-      "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
-      className,
-    )}
-    {...props}
-  />
-))
-TabsList.displayName = TabsPrimitive.List.displayName
+const Tabs: React.FC<TabsProps> = ({ value, onValueChange, children, className = "" }) => {
+  return (
+    <div className={className}>
+      {React.Children.map(children, (child) => {
+        if (React.isValidElement(child)) {
+          return React.cloneElement(child as React.ReactElement<any>, { value, onValueChange })
+        }
+        return child
+      })}
+    </div>
+  )
+}
 
-const TabsTrigger = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
-      className,
-    )}
-    {...props}
-  />
-))
-TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
+interface TabsListProps {
+  children: React.ReactNode
+  className?: string
+}
 
-const TabsContent = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-      className,
-    )}
-    {...props}
-  />
-))
-TabsContent.displayName = TabsPrimitive.Content.displayName
+const TabsList: React.FC<TabsListProps> = ({ children, className = "" }) => {
+  return (
+    <div className={`inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground ${className}`}>
+      {children}
+    </div>
+  )
+}
 
-export { Tabs, TabsList, TabsTrigger, TabsContent }
+interface TabsTriggerProps {
+  value: string
+  children: React.ReactNode
+  className?: string
+  onValueChange?: (value: string) => void
+}
+
+const TabsTrigger: React.FC<TabsTriggerProps> = ({ value, children, className = "", onValueChange }) => {
+  const parentValue = React.useContext(TabsContext)
+  const isActive = parentValue === value
+
+  const handleClick = () => {
+    if (onValueChange) {
+      onValueChange(value)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      className={`inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
+        isActive ? "bg-background text-foreground shadow-sm" : ""
+      } ${className}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+interface TabsContentProps {
+  value: string
+  children: React.ReactNode
+  className?: string
+}
+
+const TabsContext = React.createContext<string>("")
+
+const TabsContent: React.FC<TabsContentProps> = ({ value, children, className = "" }) => {
+  const parentValue = React.useContext(TabsContext)
+  const isActive = parentValue === value
+
+  if (!isActive) return null
+
+  return (
+    <div
+      className={`mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${className}`}
+    >
+      {children}
+    </div>
+  )
+}
+
+// TabsProvider bileşeni, TabsContext'i sağlar
+interface TabsProviderProps {
+  value: string
+  children: React.ReactNode
+}
+
+const TabsProvider: React.FC<TabsProviderProps> = ({ value, children }) => {
+  return <TabsContext.Provider value={value}>{children}</TabsContext.Provider>
+}
+
+// Tabs bileşenini TabsProvider ile sarmalayın
+const TabsWithProvider: React.FC<TabsProps> = (props) => {
+  return (
+    <TabsProvider value={props.value}>
+      <Tabs {...props} />
+    </TabsProvider>
+  )
+}
+
+export { TabsWithProvider as Tabs, TabsList, TabsTrigger, TabsContent }
