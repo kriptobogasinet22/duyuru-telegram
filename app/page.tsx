@@ -15,9 +15,40 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <p className="mb-4">Bot aktif ve çalışıyor.</p>
-            <Link href="/api/webhook" passHref>
-              <Button>Bot Durumunu Kontrol Et</Button>
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/api/webhook" passHref>
+                <Button>Bot Durumunu Kontrol Et</Button>
+              </Link>
+              <Link href="/admin/full" passHref>
+                <Button variant="outline">Admin Paneli</Button>
+              </Link>
+            </div>
+
+            <div className="mt-4">
+              <h3 className="font-semibold mb-2">Webhook Yönetimi:</h3>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/api/check-webhook" passHref>
+                  <Button variant="outline" size="sm">
+                    Webhook Kontrol
+                  </Button>
+                </Link>
+                <Link href="/api/set-webhook" passHref>
+                  <Button variant="outline" size="sm">
+                    Webhook Ayarla
+                  </Button>
+                </Link>
+                <Link href="/api/delete-webhook" passHref>
+                  <Button variant="outline" size="sm">
+                    Webhook Sil
+                  </Button>
+                </Link>
+                <Link href="/api/auto-fix-webhook" passHref>
+                  <Button variant="outline" size="sm">
+                    Webhook Düzelt
+                  </Button>
+                </Link>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -37,6 +68,15 @@ export default function Home() {
               </li>
               <li>
                 <code>/addadmin [user_id]</code> - Yeni admin ekle
+              </li>
+              <li>
+                <code>/listchats</code> - Botun eklendiği grupları listele
+              </li>
+              <li>
+                <code>/updatechats</code> - Grup listesini güncelle
+              </li>
+              <li>
+                <code>/chatinfo</code> - Grup bilgilerini göster
               </li>
             </ul>
 
