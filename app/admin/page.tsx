@@ -1,39 +1,37 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function AdminPage() {
-  const [loading, setLoading] = useState(true)
+  const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [envVars, setEnvVars] = useState<Record<string, string>>({})
-  const [supabaseTest, setSupabaseTest] = useState<any>(null)
+  const [data, setData] = useState<any>(null)
 
-  // Ortam değişkenlerini kontrol et
-  useEffect(() => {
-    async function checkEnv() {
-      try {
-        const response = await fetch("/api/env-test")
-        const data = await response.json()
-        setEnvVars(data)
-      } catch (err) {
-        setError(`API çağrısı başarısız: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    checkEnv()
-  }, [])
+  // Adım 1: Sayfa yüklendi
+  // Adım 2: Supabase bağlantısını test et
+  // Adım 3: Admin kullanıcılarını yükle
+  // Adım 4: Duyuruları yükle
+  // Adım 5: Bot gruplarını yükle
 
   // Supabase bağlantısını test et
   const testSupabase = async () => {
     try {
       setLoading(true)
+      setError(null)
+
       const response = await fetch("/api/test-supabase")
-      const data = await response.json()
-      setSupabaseTest(data)
+      const result = await response.json()
+
+      setData(result)
+
+      if (result.success) {
+        setStep(2) // Başarılı, bir sonraki adıma geç
+      } else {
+        setError(`Supabase bağlantı hatası: ${result.error || "Bilinmeyen hata"}`)
+      }
     } catch (err) {
       setError(`Supabase testi başarısız: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
     } finally {
@@ -41,9 +39,83 @@ export default function AdminPage() {
     }
   }
 
+  // Admin kullanıcılarını yükle
+  const loadAdminUsers = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch("/api/admin-users")
+      const result = await response.json()
+
+      setData(result)
+
+      if (result.success) {
+        setStep(3) // Başarılı, bir sonraki adıma geç
+      } else {
+        setError(`Admin kullanıcıları yüklenirken hata: ${result.error || "Bilinmeyen hata"}`)
+      }
+    } catch (err) {
+      setError(`Admin kullanıcıları yüklenirken hata: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Duyuruları yükle
+  const loadAnnouncements = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch("/api/announcements")
+      const result = await response.json()
+
+      setData(result)
+
+      if (result.success) {
+        setStep(4) // Başarılı, bir sonraki adıma geç
+      } else {
+        setError(`Duyurular yüklenirken hata: ${result.error || "Bilinmeyen hata"}`)
+      }
+    } catch (err) {
+      setError(`Duyurular yüklenirken hata: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Bot gruplarını yükle
+  const loadBotChats = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch("/api/bot-chats")
+      const result = await response.json()
+
+      setData(result)
+
+      if (result.success) {
+        setStep(5) // Başarılı, son adım
+      } else {
+        setError(`Bot grupları yüklenirken hata: ${result.error || "Bilinmeyen hata"}`)
+      }
+    } catch (err) {
+      setError(`Bot grupları yüklenirken hata: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Tam admin paneline git
+  const goToFullAdmin = () => {
+    window.location.href = "/admin/full"
+  }
+
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Admin Paneli</h1>
+      <h1 className="text-2xl font-bold mb-4">Admin Paneli - Adım {step}/5</h1>
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -54,69 +126,77 @@ export default function AdminPage() {
 
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle>Ortam Değişkenleri</CardTitle>
+          <CardTitle>{getStepTitle(step)}</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <p>Yükleniyor...</p>
-          ) : (
-            <ul className="space-y-2">
-              {Object.entries(envVars).map(([key, value]) => (
-                <li key={key} className="flex items-center">
-                  <span className="font-medium mr-2">{key}:</span>
-                  <span
-                    className={`px-2 py-1 rounded text-sm ${
-                      value.includes("✓") ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {value}
-                  </span>
-                </li>
-              ))}
-            </ul>
+          {step === 1 && (
+            <div>
+              <p className="mb-4">Supabase bağlantısını test etmek için aşağıdaki butona tıklayın.</p>
+              <Button onClick={testSupabase} disabled={loading}>
+                {loading ? "Test Ediliyor..." : "Supabase Bağlantısını Test Et"}
+              </Button>
+            </div>
           )}
-        </CardContent>
-      </Card>
 
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle>Supabase Bağlantı Testi</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={testSupabase} disabled={loading}>
-            {loading ? "Test Ediliyor..." : "Supabase Bağlantısını Test Et"}
-          </Button>
+          {step === 2 && (
+            <div>
+              <p className="mb-4">Supabase bağlantısı başarılı! Şimdi admin kullanıcılarını yükleyelim.</p>
+              <Button onClick={loadAdminUsers} disabled={loading}>
+                {loading ? "Yükleniyor..." : "Admin Kullanıcılarını Yükle"}
+              </Button>
+            </div>
+          )}
 
-          {supabaseTest && (
+          {step === 3 && (
+            <div>
+              <p className="mb-4">Admin kullanıcıları başarıyla yüklendi! Şimdi duyuruları yükleyelim.</p>
+              <Button onClick={loadAnnouncements} disabled={loading}>
+                {loading ? "Yükleniyor..." : "Duyuruları Yükle"}
+              </Button>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div>
+              <p className="mb-4">Duyurular başarıyla yüklendi! Şimdi bot gruplarını yükleyelim.</p>
+              <Button onClick={loadBotChats} disabled={loading}>
+                {loading ? "Yükleniyor..." : "Bot Gruplarını Yükle"}
+              </Button>
+            </div>
+          )}
+
+          {step === 5 && (
+            <div>
+              <p className="mb-4">Tüm veriler başarıyla yüklendi! Artık tam admin paneline gidebilirsiniz.</p>
+              <Button onClick={goToFullAdmin}>Tam Admin Paneline Git</Button>
+            </div>
+          )}
+
+          {data && (
             <div className="mt-4">
-              <h3 className="font-semibold mb-2">Test Sonucu:</h3>
-              <div
-                className={`p-4 rounded ${
-                  supabaseTest.success ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                }`}
-              >
-                <p className="font-bold">{supabaseTest.success ? "Başarılı!" : "Hata!"}</p>
-                <pre className="mt-2 overflow-auto">{JSON.stringify(supabaseTest, null, 2)}</pre>
-              </div>
+              <h3 className="font-semibold mb-2">Sonuç:</h3>
+              <pre className="bg-gray-100 p-4 rounded overflow-auto max-h-60">{JSON.stringify(data, null, 2)}</pre>
             </div>
           )}
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Yardım</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4">Eğer Supabase bağlantı testi başarısız olursa, şu adımları izleyin:</p>
-          <ol className="list-decimal list-inside space-y-2">
-            <li>Vercel'de ortam değişkenlerinin doğru formatta olduğundan emin olun</li>
-            <li>Supabase projenizin aktif olduğundan emin olun</li>
-            <li>Supabase URL'sinin başında "https://" olduğundan emin olun</li>
-            <li>Anahtarların tam olarak Supabase'den kopyalandığından emin olun</li>
-          </ol>
-        </CardContent>
-      </Card>
     </div>
   )
+}
+
+function getStepTitle(step: number): string {
+  switch (step) {
+    case 1:
+      return "Supabase Bağlantı Testi"
+    case 2:
+      return "Admin Kullanıcıları Yükleme"
+    case 3:
+      return "Duyurular Yükleme"
+    case 4:
+      return "Bot Grupları Yükleme"
+    case 5:
+      return "Tamamlandı"
+    default:
+      return "Bilinmeyen Adım"
+  }
 }
