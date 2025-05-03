@@ -29,14 +29,60 @@ export async function processUpdate(update: any) {
 
     console.log("Webhook update işleniyor:", JSON.stringify(update))
 
-    // Yeni üye katılma olayını kontrol et
-    if (update.message?.new_chat_members) {
-      await handleNewChatMembers(update.message)
+    // Mesaj varsa işle
+    if (update.message) {
+      // Sohbet bilgilerini kaydet
+      const chat = update.message.chat
+      if (chat && chat.type !== "private") {
+        console.log("Grup mesajı alındı, grubu veritabanına kaydediyorum:", chat.id, chat.title)
+        await updateBotChat(chat)
+      }
+
+      // Yeni üye katılma olayını kontrol et
+      if (update.message.new_chat_members) {
+        await handleNewChatMembers(update.message)
+      }
+
+      // Komutları kontrol et
+      if (update.message.text) {
+        await handleCommands(update.message)
+      }
     }
 
-    // Komutları kontrol et
-    if (update.message?.text) {
-      await handleCommands(update.message)
+    // Düzenlenen mesajları işle
+    if (update.edited_message) {
+      const chat = update.edited_message.chat
+      if (chat && chat.type !== "private") {
+        console.log("Düzenlenen grup mesajı alındı, grubu veritabanına kaydediyorum:", chat.id, chat.title)
+        await updateBotChat(chat)
+      }
+    }
+
+    // Kanal mesajlarını işle
+    if (update.channel_post) {
+      const chat = update.channel_post.chat
+      if (chat) {
+        console.log("Kanal mesajı alındı, kanalı veritabanına kaydediyorum:", chat.id, chat.title)
+        await updateBotChat(chat)
+      }
+    }
+
+    // Düzenlenen kanal mesajlarını işle
+    if (update.edited_channel_post) {
+      const chat = update.edited_channel_post.chat
+      if (chat) {
+        console.log("Düzenlenen kanal mesajı alındı, kanalı veritabanına kaydediyorum:", chat.id, chat.title)
+        await updateBotChat(chat)
+      }
+    }
+
+    // Callback query'leri işle
+    if (update.callback_query && update.callback_query.message) {
+      const chat = update.callback_query.message.chat
+      if (chat && chat.type !== "private") {
+        console.log("Callback query alındı, grubu veritabanına kaydediyorum:", chat.id, chat.title)
+        await updateBotChat(chat)
+      }
     }
 
     return true
@@ -271,6 +317,11 @@ async function handleCommands(msg: TelegramBot.Message) {
           return
         }
 
+        // Mevcut sohbeti veritabanına kaydet
+        if (msg.chat.type !== "private") {
+          await updateBotChat(msg.chat)
+        }
+
         // Botun üye olduğu tüm grupları güncelle
         await updateAllBotChats()
         await bot?.sendMessage(chatId, "Gruplar başarıyla güncellendi!")
@@ -297,6 +348,11 @@ async function handleCommands(msg: TelegramBot.Message) {
           console.log("Admin değil, yetki hatası")
           await bot?.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
           return
+        }
+
+        // Mevcut sohbeti veritabanına kaydet
+        if (msg.chat.type !== "private") {
+          await updateBotChat(msg.chat)
         }
 
         // Botun üye olduğu grupları al
@@ -328,6 +384,62 @@ async function handleCommands(msg: TelegramBot.Message) {
         await bot?.sendMessage(chatId, message)
       } catch (err) {
         console.error("listchats komut hatası:", err)
+        await bot?.sendMessage(chatId, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
+      }
+      return
+    }
+
+    // Grup bilgilerini göster
+    if (text === "/chatinfo") {
+      try {
+        // Kullanıcının admin olup olmadığını kontrol et
+        const { data: adminUser, error } = await supabaseAdmin
+          .from("admin_users")
+          .select("*")
+          .eq("user_id", userId)
+          .single()
+
+        console.log("Admin kontrolü sonucu:", { adminUser, error })
+
+        if (error || !adminUser) {
+          console.log("Admin değil, yetki hatası")
+          await bot?.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
+          return
+        }
+
+        // Grup bilgilerini al
+        const chatInfo = await bot?.getChat(chatId)
+
+        let message = `Sohbet Bilgileri:\n\n`
+        message += `ID: ${chatId}\n`
+        message += `Tür: ${msg.chat.type}\n`
+
+        if (msg.chat.title) {
+          message += `Başlık: ${msg.chat.title}\n`
+        }
+
+        if (msg.chat.username) {
+          message += `Kullanıcı adı: @${msg.chat.username}\n`
+        }
+
+        if (msg.chat.type !== "private") {
+          try {
+            const memberCount = await bot?.getChatMemberCount(chatId)
+            message += `Üye sayısı: ${memberCount}\n`
+
+            const botInfo = await bot?.getMe()
+            const botMember = await bot?.getChatMember(chatId, botInfo.id.toString())
+            message += `Bot durumu: ${botMember.status}\n`
+            message += `Bot admin mi: ${["administrator", "creator"].includes(botMember.status) ? "Evet" : "Hayır"}\n`
+          } catch (error) {
+            console.error("Grup bilgilerini alma hatası:", error)
+            message += `Grup bilgilerini alma hatası: ${error instanceof Error ? error.message : "Bilinmeyen hata"}\n`
+          }
+        }
+
+        await bot?.sendMessage(chatId, message)
+      } catch (err) {
+        console.error("chatinfo komut hatası:", err)
         await bot?.sendMessage(chatId, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
       }
       return
