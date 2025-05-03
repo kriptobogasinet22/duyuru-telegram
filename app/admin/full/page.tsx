@@ -4,62 +4,105 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw } from "lucide-react"
 
 export default function FullAdminPage() {
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [adminUsers, setAdminUsers] = useState<any[]>([])
   const [announcements, setAnnouncements] = useState<any[]>([])
   const [botChats, setBotChats] = useState<any[]>([])
-  const [activeTab, setActiveTab] = useState("announcements")
+  const [activeTab, setActiveTab] = useState("bot-chats") // Varsayılan olarak bot-chats sekmesini göster
 
   // Verileri yükle
   useEffect(() => {
-    async function loadData() {
-      try {
-        setLoading(true)
-        setError(null)
-
-        // Admin kullanıcılarını yükle
-        const adminResponse = await fetch("/api/admin-users")
-        const adminResult = await adminResponse.json()
-
-        if (!adminResult.success) {
-          throw new Error(`Admin kullanıcıları yüklenirken hata: ${adminResult.error}`)
-        }
-
-        setAdminUsers(adminResult.data || [])
-
-        // Duyuruları yükle
-        const announcementsResponse = await fetch("/api/announcements")
-        const announcementsResult = await announcementsResponse.json()
-
-        if (!announcementsResult.success) {
-          throw new Error(`Duyurular yüklenirken hata: ${announcementsResult.error}`)
-        }
-
-        setAnnouncements(announcementsResult.data || [])
-
-        // Bot gruplarını yükle
-        const botChatsResponse = await fetch("/api/bot-chats")
-        const botChatsResult = await botChatsResponse.json()
-
-        if (!botChatsResult.success) {
-          throw new Error(`Bot grupları yüklenirken hata: ${botChatsResult.error}`)
-        }
-
-        setBotChats(botChatsResult.data || [])
-      } catch (err) {
-        console.error("Veri yükleme hatası:", err)
-        setError(`Veri yükleme hatası: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadData()
+    loadAllData()
   }, [])
+
+  // Tüm verileri yükle
+  async function loadAllData() {
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Admin kullanıcılarını yükle
+      const adminResponse = await fetch("/api/admin-users")
+      const adminResult = await adminResponse.json()
+
+      if (!adminResult.success) {
+        throw new Error(`Admin kullanıcıları yüklenirken hata: ${adminResult.error}`)
+      }
+
+      setAdminUsers(adminResult.data || [])
+
+      // Duyuruları yükle
+      const announcementsResponse = await fetch("/api/announcements")
+      const announcementsResult = await announcementsResponse.json()
+
+      if (!announcementsResult.success) {
+        throw new Error(`Duyurular yüklenirken hata: ${announcementsResult.error}`)
+      }
+
+      setAnnouncements(announcementsResult.data || [])
+
+      // Bot gruplarını yükle
+      await loadBotChats()
+    } catch (err) {
+      console.error("Veri yükleme hatası:", err)
+      setError(`Veri yükleme hatası: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Bot gruplarını yükle
+  async function loadBotChats() {
+    try {
+      const botChatsResponse = await fetch("/api/bot-chats")
+      const botChatsResult = await botChatsResponse.json()
+
+      console.log("Bot grupları yüklendi:", botChatsResult)
+
+      if (!botChatsResult.success) {
+        throw new Error(`Bot grupları yüklenirken hata: ${botChatsResult.error}`)
+      }
+
+      setBotChats(botChatsResult.data || [])
+      return botChatsResult.data || []
+    } catch (err) {
+      console.error("Bot grupları yükleme hatası:", err)
+      throw err
+    }
+  }
+
+  // Grupları yenile
+  async function refreshBotChats() {
+    try {
+      setRefreshing(true)
+      setError(null)
+
+      // Önce grupları yenile API'sini çağır
+      const refreshResponse = await fetch("/api/refresh-chats")
+      const refreshResult = await refreshResponse.json()
+
+      if (!refreshResult.success) {
+        throw new Error(`Grupları yenileme hatası: ${refreshResult.error}`)
+      }
+
+      // Sonra güncel grupları yükle
+      await loadBotChats()
+
+      // Başarı mesajı
+      alert("Gruplar başarıyla yenilendi!")
+    } catch (err) {
+      console.error("Grupları yenileme hatası:", err)
+      setError(`Grupları yenileme hatası: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
+      alert(`Hata: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   return (
     <div className="container mx-auto p-4">
@@ -79,15 +122,9 @@ export default function FullAdminPage() {
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="announcements" onValueChange={setActiveTab}>
-              Duyurular ({announcements.length})
-            </TabsTrigger>
-            <TabsTrigger value="bot-chats" onValueChange={setActiveTab}>
-              Bot Grupları ({botChats.length})
-            </TabsTrigger>
-            <TabsTrigger value="admin-users" onValueChange={setActiveTab}>
-              Admin Kullanıcıları ({adminUsers.length})
-            </TabsTrigger>
+            <TabsTrigger value="announcements">Duyurular ({announcements.length})</TabsTrigger>
+            <TabsTrigger value="bot-chats">Bot Grupları ({botChats.length})</TabsTrigger>
+            <TabsTrigger value="admin-users">Admin Kullanıcıları ({adminUsers.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="announcements">
@@ -138,17 +175,28 @@ export default function FullAdminPage() {
                       Bot'un eklendiği ve yönetici olduğu grupları görüntüleyin ve duyuru ayarlayın
                     </CardDescription>
                   </div>
-                  <Button variant="outline" size="sm" className="flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4" />
-                    Grupları Yenile
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                    onClick={refreshBotChats}
+                    disabled={refreshing}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                    {refreshing ? "Yenileniyor..." : "Grupları Yenile"}
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
                 {botChats.length === 0 ? (
-                  <p className="text-center py-4 text-gray-500">
-                    Bot henüz hiçbir gruba eklenmemiş veya gruplar henüz yüklenmedi.
-                  </p>
+                  <div className="text-center py-4">
+                    <p className="text-gray-500 mb-4">
+                      Bot henüz hiçbir gruba eklenmemiş veya gruplar henüz yüklenmedi.
+                    </p>
+                    <Button variant="outline" onClick={loadBotChats} disabled={refreshing}>
+                      Grupları Tekrar Yükle
+                    </Button>
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     {botChats.map((chat) => {
