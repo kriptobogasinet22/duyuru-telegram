@@ -130,8 +130,22 @@ async function handleNewChatMembers(msg: TelegramBot.Message) {
           .replace("{last_name}", member.last_name || "")
           .replace("{chat_title}", chatTitle)
 
-        // Mesajı gönder
-        bot?.sendMessage(chatId, personalizedMessage, { parse_mode: "Markdown" })
+        try {
+          // Mesajı özelden gönder
+          await bot?.sendMessage(member.id, personalizedMessage, { parse_mode: "Markdown" })
+          console.log(`Duyuru mesajı ${member.id} ID'li kullanıcıya özelden gönderildi`)
+
+          // Gruba bilgi mesajı gönder (isteğe bağlı)
+          // await bot?.sendMessage(chatId, `${username} kullanıcısına hoş geldin mesajı gönderildi.`)
+        } catch (error) {
+          console.error(`Özelden mesaj gönderme hatası (${member.id}):`, error)
+
+          // Eğer özelden mesaj gönderilemezse, gruba bilgi mesajı gönder
+          await bot?.sendMessage(
+            chatId,
+            `${username} kullanıcısına özelden mesaj gönderilemedi. Kullanıcının botu engellememiş olduğundan emin olun.`,
+          )
+        }
       }
     }
   } catch (error) {
