@@ -1,16 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { initBot, processUpdate } from "@/lib/telegram"
 
-// Global bot örneği
-let botInitialized = false
-
 export async function GET() {
   // Botu başlat
-  if (!botInitialized) {
-    initBot()
-    botInitialized = true
-  }
-
+  initBot()
   return NextResponse.json({ status: "Bot çalışıyor!" })
 }
 
