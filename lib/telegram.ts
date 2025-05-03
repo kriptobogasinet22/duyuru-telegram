@@ -13,7 +13,7 @@ export function initBot() {
 
   // Webhook modunda çalışacak şekilde botu başlat
   bot = new TelegramBot(token, {
-    polling: true, // Webhook yerine polling kullanıyoruz
+    polling: false, // Webhook yerine polling kullanıyoruz
   })
 
   // Debug için bot bilgilerini logla
