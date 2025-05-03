@@ -29,18 +29,24 @@ export async function processUpdate(update: any) {
 
     console.log("Webhook update işleniyor:", JSON.stringify(update))
 
-    // Mesaj varsa işle
+    // Katılma isteği olayını işle (bu, kullanıcı gruba/kanala katılmak istediğinde tetiklenir)
+    if (update.chat_join_request) {
+      await handleChatJoinRequest(update.chat_join_request)
+      return true
+    }
+
+    // Yeni üye katılma olayını işle
+    if (update.message && update.message.new_chat_members) {
+      await handleNewChatMembers(update.message)
+    }
+
+    // Diğer mesaj türlerini işle
     if (update.message) {
       // Sohbet bilgilerini kaydet
       const chat = update.message.chat
       if (chat && chat.type !== "private") {
-        console.log("Grup mesajı alındı, grubu veritabanına kaydediyorum:", chat.id, chat.title)
+        console.log("Grup/kanal mesajı alındı, veritabanına kaydediyorum:", chat.id, chat.title)
         await updateBotChat(chat)
-      }
-
-      // Yeni üye katılma olayını kontrol et
-      if (update.message.new_chat_members) {
-        await handleNewChatMembers(update.message)
       }
 
       // Komutları kontrol et
@@ -49,50 +55,21 @@ export async function processUpdate(update: any) {
       }
     }
 
-    // Düzenlenen mesajları işle
-    if (update.edited_message) {
-      const chat = update.edited_message.chat
-      if (chat && chat.type !== "private") {
-        console.log("Düzenlenen grup mesajı alındı, grubu veritabanına kaydediyorum:", chat.id, chat.title)
-        await updateBotChat(chat)
-      }
+    // Diğer update türlerini işle
+    if (update.edited_message && update.edited_message.chat) {
+      await updateBotChat(update.edited_message.chat)
     }
 
-    // Kanal mesajlarını işle
-    if (update.channel_post) {
-      const chat = update.channel_post.chat
-      if (chat) {
-        console.log("Kanal mesajı alındı, kanalı veritabanına kaydediyorum:", chat.id, chat.title)
-        await updateBotChat(chat)
-      }
+    if (update.channel_post && update.channel_post.chat) {
+      await updateBotChat(update.channel_post.chat)
     }
 
-    // Düzenlenen kanal mesajlarını işle
-    if (update.edited_channel_post) {
-      const chat = update.edited_channel_post.chat
-      if (chat) {
-        console.log("Düzenlenen kanal mesajı alındı, kanalı veritabanına kaydediyorum:", chat.id, chat.title)
-        await updateBotChat(chat)
-      }
+    if (update.edited_channel_post && update.edited_channel_post.chat) {
+      await updateBotChat(update.edited_channel_post.chat)
     }
 
-    // Callback query'leri işle
-    if (update.callback_query && update.callback_query.message) {
-      const chat = update.callback_query.message.chat
-      if (chat && chat.type !== "private") {
-        console.log("Callback query alındı, grubu veritabanına kaydediyorum:", chat.id, chat.title)
-        await updateBotChat(chat)
-      }
-    }
-
-    // Kanal sohbeti üye güncellemelerini işle (yeni üye katıldı)
-    if (update.chat_member) {
-      await handleChatMemberUpdate(update.chat_member)
-    }
-
-    // Kanal sohbeti üye güncellemelerini işle (yeni üye katıldı)
-    if (update.my_chat_member) {
-      await handleMyChatMemberUpdate(update.my_chat_member)
+    if (update.callback_query && update.callback_query.message && update.callback_query.message.chat) {
+      await updateBotChat(update.callback_query.message.chat)
     }
 
     return true
@@ -102,101 +79,57 @@ export async function processUpdate(update: any) {
   }
 }
 
-// Chat member güncellemelerini işle (yeni üye katıldı)
-async function handleChatMemberUpdate(chatMember: any) {
+// Chat join request olayını işle - ÖNEMLİ: Bu fonksiyon, kullanıcı gruba/kanala katılma isteği gönderdiğinde çalışır
+async function handleChatJoinRequest(joinRequest: any) {
   try {
-    console.log("Chat member güncelleme alındı:", JSON.stringify(chatMember))
+    console.log("Chat join request alındı:", JSON.stringify(joinRequest))
 
-    // Sadece yeni üye katılma olaylarını işle
-    if (chatMember.new_chat_member && 
-        (chatMember.new_chat_member.status === "member" || 
-         chatMember.new_chat_member.status === "administrator" || 
-         chatMember.new_chat_member.status === "creator") && 
-        chatMember.old_chat_member.status !== chatMember.new_chat_member.status) {
-      
-      const chatId = chatMember.chat.id
-      const chatType = chatMember.chat.type
-      const chatTitle = chatMember.chat.title || ""
-      const userId = chatMember.new_chat_member.user.id
-      const user = chatMember.new_chat_member.user
+    const chatId = joinRequest.chat.id
+    const chatType = joinRequest.chat.type
+    const chatTitle = joinRequest.chat.title || ""
+    const user = joinRequest.from
 
-      // Bot kendisi ise işleme
-      if (user.is_bot && user.username === bot?.options.username) {
-        console.log("Bot kendisi kanala/gruba eklendi, veritabanına kaydediliyor:", chatId, chatTitle)
-        await updateBotChat(chatMember.chat)
-        return
-      }
+    // Kullanıcı bilgilerini al
+    const userId = user.id
+    const username = user.username ? `@${user.username}` : user.first_name
 
-      // Sohbeti veritabanına kaydet
-      await updateBotChat(chatMember.chat)
+    console.log(`Kullanıcı ${username} (${userId}), ${chatTitle} (${chatId}) grubuna/kanalına katılma isteği gönderdi`)
 
-      // Bu sohbet için duyuru mesajını al
-      const { data: announcements } = await supabaseAdmin.from("announcements").select("*").eq("chat_id", chatId).single()
+    // Bu sohbet için duyuru mesajını al
+    const { data: announcements, error } = await supabaseAdmin
+      .from("announcements")
+      .select("*")
+      .eq("chat_id", chatId)
+      .single()
 
-      // Eğer duyuru mesajı varsa, yeni üyeye gönder
-      if (announcements) {
-        // Kullanıcı adını al
-        const username = user.username ? `@${user.username}` : user.first_name
+    if (error) {
+      console.log(`${chatId} için duyuru mesajı bulunamadı:`, error.message)
+    }
 
-        // Mesajı kişiselleştir
-        const personalizedMessage = announcements.message
-          .replace("{username}", username)
-          .replace("{first_name}", user.first_name || "")
-          .replace("{last_name}", user.last_name || "")
-          .replace("{chat_title}", chatTitle)
+    // Eğer duyuru mesajı varsa, kullanıcıya özelden gönder
+    if (announcements) {
+      // Mesajı kişiselleştir
+      const personalizedMessage = announcements.message
+        .replace("{username}", username)
+        .replace("{first_name}", user.first_name || "")
+        .replace("{last_name}", user.last_name || "")
+        .replace("{chat_title}", chatTitle)
 
-        try {
-          // Mesajı özelden göndermeyi dene
-          await bot?.sendMessage(userId, personalizedMessage, { parse_mode: "Markdown" })
-          console.log(`Duyuru mesajı ${userId} ID'li kullanıcıya özelden gönderildi (chat_member event)`)
-        } catch (error) {
-          console.error(`Özelden mesaj gönderme hatası (${userId}):`, error)
-          // Hata durumunda sessizce başarısız ol, gruba mesaj gönderme
-        }
+      try {
+        // ÖNEMLİ: Bu, kullanıcı bota /start komutu vermeden önce mesaj gönderebilen nadir durumlardan biridir
+        await bot?.sendMessage(userId, personalizedMessage, { parse_mode: "Markdown" })
+        console.log(`Duyuru mesajı ${userId} ID'li kullanıcıya özelden gönderildi (katılma isteği)`)
+      } catch (error) {
+        console.error(`Özelden mesaj gönderme hatası (${userId}):`, error)
+        // Sessizce başarısız ol, gruba mesaj gönderme
       }
     }
+
+    // Grubu/kanalı veritabanına kaydet/güncelle
+    await updateBotChat(joinRequest.chat)
   } catch (error) {
-    console.error("Chat member güncelleme hatası:", error)
-  }
-}
-
-// My chat member güncellemelerini işle (bot durumu değişti)
-async function handleMyChatMemberUpdate(myChatMember: any) {
-  try {
-    console.log("My chat member güncelleme alındı:", JSON.stringify(myChatMember))
-
-    // Botun durumu değişti
-    const chatId = myChatMember.chat.id
-    const chatType = myChatMember.chat.type
-    const chatTitle = myChatMember.chat.title || ""
-    const newStatus = myChatMember.new_chat_member.status
-    const oldStatus = myChatMember.old_chat_member.status
-
-    // Bot kanala/gruba eklendi
-    if ((newStatus === "member" || newStatus === "administrator") && 
-        (oldStatus === "left" || oldStatus === "kicked")) {
-      console.log("Bot kanala/gruba eklendi:", chatId, chatTitle)
-      await updateBotChat(myChatMember.chat)
-    }
-    // Bot kanaldan/gruptan çıkarıldı
-    else if ((newStatus === "left" || newStatus === "kicked") && 
-             (oldStatus === "member" || oldStatus === "administrator")) {
-      console.log("Bot kanaldan/gruptan çıkarıldı:", chatId, chatTitle)
-      // Veritabanından sil
-      await supabaseAdmin.from("bot_chats").delete().eq("chat_id", chatId)
-    }
-    // Bot admin yapıldı
-    else if (newStatus === "administrator" && oldStatus !== "administrator") {
-      console.log("Bot admin yapıldı:", chatId, chatTitle)
-      await updateBotChat(myChatMember.chat)
-    }
-    // Bot admin yetkisi alındı
-    else if (oldStatus === "administrator" && newStatus !== "administrator") {
-      console.log("Bot admin yetkisi alındı:", chatId, chatTitle)
-      await updateBotChat(myChatMember.chat)
-    }
-  } catch (error) {
-    console.error("My chat member güncelleme hatası:", error)
+    console.error("Chat join request işleme hatası:", error)
+    // Hata durumunda sessizce başarısız ol
   }
 }
 
@@ -215,13 +148,21 @@ async function handleNewChatMembers(msg: TelegramBot.Message) {
     // Bot kendisi gruba eklendiyse, grubu veritabanına kaydet
     const botUser = newMembers.find((member) => member.is_bot && member.username === bot?.options.username)
     if (botUser) {
-      console.log("Bot gruba eklendi, veritabanına kaydediliyor:", chatId, chatTitle)
+      console.log("Bot gruba/kanala eklendi, veritabanına kaydediliyor:", chatId, chatTitle)
       await updateBotChat(msg.chat)
       return // Bot kendisi eklendiyse, diğer işlemleri yapma
     }
 
     // Bu sohbet için duyuru mesajını al
-    const { data: announcements } = await supabaseAdmin.from("announcements").select("*").eq("chat_id", chatId).single()
+    const { data: announcements, error } = await supabaseAdmin
+      .from("announcements")
+      .select("*")
+      .eq("chat_id", chatId)
+      .single()
+
+    if (error) {
+      console.log(`${chatId} için duyuru mesajı bulunamadı:`, error.message)
+    }
 
     // Eğer duyuru mesajı varsa, her yeni üyeye gönder
     if (announcements) {
@@ -241,18 +182,19 @@ async function handleNewChatMembers(msg: TelegramBot.Message) {
           .replace("{chat_title}", chatTitle)
 
         try {
-          // Mesajı özelden göndermeyi dene
+          // Kullanıcıya özelden mesaj göndermeyi dene
+          // NOT: Bu durumda kullanıcının bota daha önce /start komutu vermiş olması gerekir
           await bot?.sendMessage(userId, personalizedMessage, { parse_mode: "Markdown" })
           console.log(`Duyuru mesajı ${userId} ID'li kullanıcıya özelden gönderildi`)
         } catch (error) {
           console.error(`Özelden mesaj gönderme hatası (${userId}):`, error)
-          // Hata durumunda sessizce başarısız ol, gruba mesaj gönderme
+          // Sessizce başarısız ol, gruba mesaj gönderme
         }
       }
     }
   } catch (error) {
     console.error("Yeni üye işleme hatası:", error)
-    // Hata durumunda sessizce başarısız ol, gruba hata mesajı gönderme
+    // Hata durumunda sessizce başarısız ol
   }
 }
 
@@ -268,7 +210,7 @@ async function handleCommands(msg: TelegramBot.Message) {
     // Start komutu
     if (text === "/start") {
       const firstName = msg.from?.first_name
-      const message = `Merhaba ${firstName}! 👋\n\nBen bir hoş geldin botuyum. Gruplara eklendiğimde, yeni katılan üyelere hoş geldin mesajı gönderirim.\n\nKomutlar:\n/myid - Kullanıcı ID'nizi gösterir\n/setmessage [mesaj] - Duyuru mesajını ayarlar\n/showmessage - Mevcut duyuru mesajını gösterir\n/listchats - Botun eklendiği grupları listeler\n/updatechats - Grup listesini günceller`
+      const message = `Merhaba ${firstName}! 👋\n\nBen bir hoş geldin botuyum. Gruplara ve kanallara eklendiğimde, yeni katılan üyelere hoş geldin mesajı gönderirim.\n\nKomutlar:\n/myid - Kullanıcı ID'nizi gösterir\n/setmessage [mesaj] - Duyuru mesajını ayarlar\n/showmessage - Mevcut duyuru mesajını gösterir\n/listchats - Botun eklendiği grupları listeler\n/updatechats - Grup listesini günceller`
       await bot?.sendMessage(chatId, message)
       return
     }
@@ -578,7 +520,7 @@ async function updateBotChat(chat: TelegramBot.Chat) {
     try {
       // Grup bilgilerini al
       const chatInfo = await bot?.getChat(chat.id)
-      console.log("Grup bilgileri alındı:", chatInfo)
+      console.log("Grup/kanal bilgileri alındı:", chatInfo)
 
       // Üye sayısını al
       if (chat.type !== "private") {
@@ -595,10 +537,10 @@ async function updateBotChat(chat: TelegramBot.Chat) {
         console.log("Bot admin mi:", isAdmin, "Status:", botMember.status)
       }
     } catch (error) {
-      console.error(`Grup bilgilerini alma hatası (${chat.id}):`, error)
+      console.error(`Grup/kanal bilgilerini alma hatası (${chat.id}):`, error)
     }
 
-    // Grubu veritabanına kaydet/güncelle
+    // Grubu/kanalı veritabanına kaydet/güncelle
     const { data, error } = await supabaseAdmin.from("bot_chats").upsert(
       {
         chat_id: chat.id,
@@ -614,12 +556,12 @@ async function updateBotChat(chat: TelegramBot.Chat) {
     )
 
     if (error) {
-      console.error(`Grup güncelleme hatası (${chat.id}):`, error)
+      console.error(`Grup/kanal güncelleme hatası (${chat.id}):`, error)
     } else {
-      console.log(`Grup başarıyla güncellendi (${chat.id}):`, data)
+      console.log(`Grup/kanal başarıyla güncellendi (${chat.id}):`, data)
     }
   } catch (error) {
-    console.error(`Grup güncelleme hatası (${chat.id}):`, error)
+    console.error(`Grup/kanal güncelleme hatası (${chat.id}):`, error)
   }
 }
 
@@ -636,33 +578,33 @@ async function updateAllBotChats() {
       throw fetchError
     }
 
-    console.log("Veritabanındaki gruplar:", chats)
+    console.log("Veritabanındaki gruplar/kanallar:", chats)
 
     if (chats && chats.length > 0) {
-      // Her grup için bilgileri güncelle
+      // Her grup/kanal için bilgileri güncelle
       for (const chat of chats) {
         try {
-          console.log("Grup güncelleniyor:", chat.chat_id)
+          console.log("Grup/kanal güncelleniyor:", chat.chat_id)
           const chatInfo = await bot?.getChat(chat.chat_id)
           if (chatInfo) {
             await updateBotChat(chatInfo)
           }
         } catch (error) {
-          console.error(`Grup bilgilerini alma hatası (${chat.chat_id}):`, error)
-          // Eğer bot gruptan çıkarıldıysa, veritabanından sil
+          console.error(`Grup/kanal bilgilerini alma hatası (${chat.chat_id}):`, error)
+          // Eğer bot gruptan/kanaldan çıkarıldıysa, veritabanından sil
           if (error.message && (error.message.includes("chat not found") || error.message.includes("bot was kicked"))) {
             await supabaseAdmin.from("bot_chats").delete().eq("chat_id", chat.chat_id)
-            console.log(`Grup silindi (${chat.chat_id}): Bot gruptan çıkarılmış`)
+            console.log(`Grup/kanal silindi (${chat.chat_id}): Bot gruptan/kanaldan çıkarılmış`)
           }
         }
       }
     } else {
-      console.log("Veritabanında hiç grup yok")
+      console.log("Veritabanında hiç grup/kanal yok")
     }
 
     return true
   } catch (error) {
-    console.error("Tüm grupları güncelleme hatası:", error)
+    console.error("Tüm grupları/kanalları güncelleme hatası:", error)
     throw error
   }
 }
@@ -674,4 +616,3 @@ export function stopBot() {
     console.log("Telegram bot durduruldu!")
   }
 }
-
