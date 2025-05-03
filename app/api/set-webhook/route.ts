@@ -13,12 +13,16 @@ export async function GET() {
       })
     }
 
-    // Vercel URL'ini al
-    const vercelUrl = process.env.VERCEL_URL || "duyuru-telegram.vercel.app"
-    const webhookUrl = `https://${vercelUrl}/api/webhook`
+    // Sabit production URL'ini kullan
+    // NOT: Vercel'in otomatik oluşturduğu URL'leri kullanmak yerine,
+    // projenin kalıcı domain'ini kullanıyoruz
+    const webhookUrl = "https://duyuru-telegram.vercel.app/api/webhook"
 
     try {
-      // Webhook'u ayarla
+      // Önce mevcut webhook'u temizle
+      await bot.deleteWebHook()
+
+      // Sonra yeni webhook'u ayarla
       const result = await bot.setWebHook(webhookUrl)
 
       // Webhook bilgilerini al
