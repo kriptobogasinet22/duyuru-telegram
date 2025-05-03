@@ -13,21 +13,42 @@ export function initBot() {
 
   // Webhook modunda çalışacak şekilde botu başlat
   bot = new TelegramBot(token, {
-    polling: false, // Webhook yerine polling kullanıyoruz
+    polling: false, // Webhook modu için false
   })
 
-  // Debug için bot bilgilerini logla
-  bot
-    .getMe()
-    .then((botInfo) => {
-      console.log("Bot bilgileri:", botInfo)
-    })
-    .catch((err) => {
-      console.error("Bot bilgilerini alma hatası:", err)
-    })
+  console.log("Telegram bot başlatıldı! Webhook modunda çalışıyor.")
+  return bot
+}
 
-  // Yeni üye katıldığında
-  bot.on("new_chat_members", async (msg) => {
+// Webhook işleme fonksiyonu
+export async function processUpdate(update: any) {
+  try {
+    if (!bot) {
+      initBot()
+    }
+
+    console.log("Webhook update işleniyor:", JSON.stringify(update))
+
+    // Yeni üye katılma olayını kontrol et
+    if (update.message?.new_chat_members) {
+      await handleNewChatMembers(update.message)
+    }
+
+    // Komutları kontrol et
+    if (update.message?.text) {
+      await handleCommands(update.message)
+    }
+
+    return true
+  } catch (error) {
+    console.error("Update işleme hatası:", error)
+    throw error
+  }
+}
+
+// Yeni üye katılma olayını işle
+async function handleNewChatMembers(msg: TelegramBot.Message) {
+  try {
     console.log("Yeni üye katıldı:", JSON.stringify(msg))
 
     const chatId = msg.chat.id
@@ -51,7 +72,7 @@ export function initBot() {
     if (announcements) {
       for (const member of newMembers) {
         // Bot kendisi ise atla
-        if (member.is_bot && member.username === bot.options.username) continue
+        if (member.is_bot && member.username === bot?.options.username) continue
 
         // Kullanıcı adını al
         const username = member.username ? `@${member.username}` : member.first_name
@@ -64,286 +85,256 @@ export function initBot() {
           .replace("{chat_title}", chatTitle)
 
         // Mesajı gönder
-        bot.sendMessage(chatId, personalizedMessage, { parse_mode: "Markdown" })
+        bot?.sendMessage(chatId, personalizedMessage, { parse_mode: "Markdown" })
       }
     }
-  })
+  } catch (error) {
+    console.error("Yeni üye işleme hatası:", error)
+  }
+}
 
-  // Bot bir gruptan çıkarıldığında
-  bot.on("left_chat_member", async (msg) => {
-    // Çıkarılan üye bot ise
-    if (msg.left_chat_member?.is_bot && msg.left_chat_member?.username === bot?.options.username) {
-      // Grubu veritabanından sil
-      await supabaseAdmin.from("bot_chats").delete().eq("chat_id", msg.chat.id)
-    }
-  })
-
-  // Grup bilgileri güncellendiğinde
-  bot.on("new_chat_title", async (msg) => {
-    await updateBotChat(msg.chat)
-  })
-
-  // Grup fotoğrafı değiştiğinde
-  bot.on("new_chat_photo", async (msg) => {
-    await updateBotChat(msg.chat)
-  })
-
-  // Admin komutlarını işle
-  bot.onText(/\/setmessage (.+)/, async (msg, match) => {
+// Komutları işle
+async function handleCommands(msg: TelegramBot.Message) {
+  try {
     const chatId = msg.chat.id
     const userId = msg.from?.id
+    const text = msg.text || ""
 
-    console.log("setmessage komutu alındı. User ID:", userId)
+    console.log("Komut alındı:", text, "User ID:", userId)
 
-    try {
-      // Kullanıcının admin olup olmadığını kontrol et
-      const { data: adminUser, error } = await supabaseAdmin
-        .from("admin_users")
-        .select("*")
-        .eq("user_id", userId)
-        .single()
-
-      console.log("Admin kontrolü sonucu:", { adminUser, error })
-
-      if (error || !adminUser) {
-        console.log("Admin değil, yetki hatası")
-        bot.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
-        return
-      }
-
-      // Yeni mesajı al
-      const newMessage = match?.[1]
-
-      if (!newMessage) {
-        bot.sendMessage(chatId, "Lütfen bir mesaj belirtin. Örnek: /setmessage Hoş geldiniz!")
-        return
-      }
-
-      // Mesajı veritabanına kaydet
-      const { data, error: saveError } = await supabaseAdmin.from("announcements").upsert(
-        {
-          chat_id: chatId,
-          chat_type: msg.chat.type,
-          chat_title: msg.chat.title || null,
-          message: newMessage,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "chat_id",
-        },
-      )
-
-      if (saveError) {
-        console.error("Duyuru kaydetme hatası:", saveError)
-        bot.sendMessage(chatId, `Hata oluştu: ${saveError.message}`)
-        return
-      }
-
-      bot.sendMessage(chatId, "Duyuru mesajı başarıyla güncellendi!")
-    } catch (err) {
-      console.error("setmessage komut hatası:", err)
-      bot.sendMessage(chatId, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
+    // Start komutu
+    if (text === "/start") {
+      const firstName = msg.from?.first_name
+      const message = `Merhaba ${firstName}! 👋\n\nBen bir hoş geldin botuyum. Gruplara eklendiğimde, yeni katılan üyelere hoş geldin mesajı gönderirim.\n\nKomutlar:\n/myid - Kullanıcı ID'nizi gösterir\n/setmessage [mesaj] - Duyuru mesajını ayarlar\n/showmessage - Mevcut duyuru mesajını gösterir\n/listchats - Botun eklendiği grupları listeler\n/updatechats - Grup listesini günceller`
+      await bot?.sendMessage(chatId, message)
+      return
     }
-  })
 
-  // Mevcut mesajı göster
-  bot.onText(/\/showmessage/, async (msg) => {
-    const chatId = msg.chat.id
-    const userId = msg.from?.id
-
-    console.log("showmessage komutu alındı. User ID:", userId)
-
-    try {
-      // Kullanıcının admin olup olmadığını kontrol et
-      const { data: adminUser, error } = await supabaseAdmin
-        .from("admin_users")
-        .select("*")
-        .eq("user_id", userId)
-        .single()
-
-      console.log("Admin kontrolü sonucu:", { adminUser, error })
-
-      if (error || !adminUser) {
-        console.log("Admin değil, yetki hatası")
-        bot.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
-        return
-      }
-
-      // Bu sohbet için duyuru mesajını al
-      const { data: announcement, error: fetchError } = await supabaseAdmin
-        .from("announcements")
-        .select("*")
-        .eq("chat_id", chatId)
-        .single()
-
-      if (fetchError || !announcement) {
-        bot.sendMessage(chatId, "Bu sohbet için henüz bir duyuru mesajı ayarlanmamış.")
-        return
-      }
-
-      bot.sendMessage(chatId, `Mevcut duyuru mesajı:\n\n${announcement.message}`)
-    } catch (err) {
-      console.error("showmessage komut hatası:", err)
-      bot.sendMessage(chatId, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
+    // MyID komutu
+    if (text === "/myid") {
+      const username = msg.from?.username
+      await bot?.sendMessage(chatId, `Kullanıcı ID'niz: ${userId}\nKullanıcı adınız: @${username || "yok"}`)
+      return
     }
-  })
 
-  // Admin ekle
-  bot.onText(/\/addadmin (\d+)/, async (msg, match) => {
-    const chatId = msg.chat.id
-    const userId = msg.from?.id
+    // SetMessage komutu
+    if (text.startsWith("/setmessage ")) {
+      const newMessage = text.substring(12) // "/setmessage " uzunluğu 12
 
-    console.log("addadmin komutu alındı. User ID:", userId)
+      try {
+        // Kullanıcının admin olup olmadığını kontrol et
+        const { data: adminUser, error } = await supabaseAdmin
+          .from("admin_users")
+          .select("*")
+          .eq("user_id", userId)
+          .single()
 
-    try {
-      // Kullanıcının admin olup olmadığını kontrol et
-      const { data: adminUser, error } = await supabaseAdmin
-        .from("admin_users")
-        .select("*")
-        .eq("user_id", userId)
-        .single()
+        console.log("Admin kontrolü sonucu:", { adminUser, error })
 
-      console.log("Admin kontrolü sonucu:", { adminUser, error })
+        if (error || !adminUser) {
+          console.log("Admin değil, yetki hatası")
+          await bot?.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
+          return
+        }
 
-      if (error || !adminUser) {
-        console.log("Admin değil, yetki hatası")
-        bot.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
-        return
+        if (!newMessage) {
+          await bot?.sendMessage(chatId, "Lütfen bir mesaj belirtin. Örnek: /setmessage Hoş geldiniz!")
+          return
+        }
+
+        // Mesajı veritabanına kaydet
+        const { data, error: saveError } = await supabaseAdmin.from("announcements").upsert(
+          {
+            chat_id: chatId,
+            chat_type: msg.chat.type,
+            chat_title: msg.chat.title || null,
+            message: newMessage,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "chat_id",
+          },
+        )
+
+        if (saveError) {
+          console.error("Duyuru kaydetme hatası:", saveError)
+          await bot?.sendMessage(chatId, `Hata oluştu: ${saveError.message}`)
+          return
+        }
+
+        await bot?.sendMessage(chatId, "Duyuru mesajı başarıyla güncellendi!")
+      } catch (err) {
+        console.error("setmessage komut hatası:", err)
+        await bot?.sendMessage(chatId, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
       }
-
-      // Eklenecek admin ID'sini al
-      const newAdminId = Number.parseInt(match?.[1] || "0")
-
-      if (!newAdminId) {
-        bot.sendMessage(chatId, "Lütfen geçerli bir kullanıcı ID belirtin. Örnek: /addadmin 123456789")
-        return
-      }
-
-      // Yeni admini veritabanına ekle
-      const { data, error: saveError } = await supabaseAdmin.from("admin_users").insert({
-        user_id: newAdminId,
-        username: null,
-      })
-
-      if (saveError) {
-        console.error("Admin ekleme hatası:", saveError)
-        bot.sendMessage(chatId, `Hata oluştu: ${saveError.message}`)
-        return
-      }
-
-      bot.sendMessage(chatId, `Kullanıcı ID ${newAdminId} başarıyla admin olarak eklendi!`)
-    } catch (err) {
-      console.error("addadmin komut hatası:", err)
-      bot.sendMessage(chatId, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
+      return
     }
-  })
 
-  // Grupları güncelle komutu
-  bot.onText(/\/updatechats/, async (msg) => {
-    const userId = msg.from?.id
+    // ShowMessage komutu
+    if (text === "/showmessage") {
+      try {
+        // Kullanıcının admin olup olmadığını kontrol et
+        const { data: adminUser, error } = await supabaseAdmin
+          .from("admin_users")
+          .select("*")
+          .eq("user_id", userId)
+          .single()
 
-    console.log("updatechats komutu alındı. User ID:", userId)
+        console.log("Admin kontrolü sonucu:", { adminUser, error })
 
-    try {
-      // Kullanıcının admin olup olmadığını kontrol et
-      const { data: adminUser, error } = await supabaseAdmin
-        .from("admin_users")
-        .select("*")
-        .eq("user_id", userId)
-        .single()
+        if (error || !adminUser) {
+          console.log("Admin değil, yetki hatası")
+          await bot?.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
+          return
+        }
 
-      console.log("Admin kontrolü sonucu:", { adminUser, error })
+        // Bu sohbet için duyuru mesajını al
+        const { data: announcement, error: fetchError } = await supabaseAdmin
+          .from("announcements")
+          .select("*")
+          .eq("chat_id", chatId)
+          .single()
 
-      if (error || !adminUser) {
-        console.log("Admin değil, yetki hatası")
-        bot.sendMessage(msg.chat.id, "Bu komutu kullanma yetkiniz yok!")
-        return
+        if (fetchError || !announcement) {
+          await bot?.sendMessage(chatId, "Bu sohbet için henüz bir duyuru mesajı ayarlanmamış.")
+          return
+        }
+
+        await bot?.sendMessage(chatId, `Mevcut duyuru mesajı:\n\n${announcement.message}`)
+      } catch (err) {
+        console.error("showmessage komut hatası:", err)
+        await bot?.sendMessage(chatId, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
       }
-
-      // Botun üye olduğu tüm grupları güncelle
-      await updateAllBotChats()
-      bot.sendMessage(msg.chat.id, "Gruplar başarıyla güncellendi!")
-    } catch (error) {
-      console.error("Grupları güncelleme hatası:", error)
-      bot.sendMessage(msg.chat.id, "Grupları güncellerken bir hata oluştu.")
+      return
     }
-  })
 
-  // Botun üye olduğu grupları göster
-  bot.onText(/\/listchats/, async (msg) => {
-    const userId = msg.from?.id
+    // AddAdmin komutu
+    if (text.match(/^\/addadmin \d+$/)) {
+      const newAdminId = Number.parseInt(text.split(" ")[1])
 
-    console.log("listchats komutu alındı. User ID:", userId)
+      try {
+        // Kullanıcının admin olup olmadığını kontrol et
+        const { data: adminUser, error } = await supabaseAdmin
+          .from("admin_users")
+          .select("*")
+          .eq("user_id", userId)
+          .single()
 
-    try {
-      // Kullanıcının admin olup olmadığını kontrol et
-      const { data: adminUser, error } = await supabaseAdmin
-        .from("admin_users")
-        .select("*")
-        .eq("user_id", userId)
-        .single()
+        console.log("Admin kontrolü sonucu:", { adminUser, error })
 
-      console.log("Admin kontrolü sonucu:", { adminUser, error })
+        if (error || !adminUser) {
+          console.log("Admin değil, yetki hatası")
+          await bot?.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
+          return
+        }
 
-      if (error || !adminUser) {
-        console.log("Admin değil, yetki hatası")
-        bot.sendMessage(msg.chat.id, "Bu komutu kullanma yetkiniz yok!")
-        return
+        if (!newAdminId) {
+          await bot?.sendMessage(chatId, "Lütfen geçerli bir kullanıcı ID belirtin. Örnek: /addadmin 123456789")
+          return
+        }
+
+        // Yeni admini veritabanına ekle
+        const { data, error: saveError } = await supabaseAdmin.from("admin_users").insert({
+          user_id: newAdminId,
+          username: null,
+        })
+
+        if (saveError) {
+          console.error("Admin ekleme hatası:", saveError)
+          await bot?.sendMessage(chatId, `Hata oluştu: ${saveError.message}`)
+          return
+        }
+
+        await bot?.sendMessage(chatId, `Kullanıcı ID ${newAdminId} başarıyla admin olarak eklendi!`)
+      } catch (err) {
+        console.error("addadmin komut hatası:", err)
+        await bot?.sendMessage(chatId, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
       }
-
-      // Botun üye olduğu grupları al
-      const { data: chats, error: fetchError } = await supabaseAdmin
-        .from("bot_chats")
-        .select("*")
-        .order("chat_title", { ascending: true })
-
-      if (fetchError) {
-        console.error("Grupları listeleme hatası:", fetchError)
-        bot.sendMessage(msg.chat.id, "Grupları listelerken bir hata oluştu.")
-        return
-      }
-
-      if (!chats || chats.length === 0) {
-        bot.sendMessage(msg.chat.id, "Bot henüz hiçbir gruba eklenmemiş.")
-        return
-      }
-
-      // Grup listesini oluştur
-      let message = "Bot aşağıdaki gruplara eklenmiş:\n\n"
-      chats.forEach((chat, index) => {
-        message += `${index + 1}. ${chat.chat_title || "İsimsiz"} (${chat.chat_id})\n`
-        message += `   Tür: ${chat.chat_type}, Admin: ${chat.is_admin ? "Evet" : "Hayır"}\n`
-        if (chat.member_count) message += `   Üye sayısı: ${chat.member_count}\n`
-        message += "\n"
-      })
-
-      bot.sendMessage(msg.chat.id, message)
-    } catch (err) {
-      console.error("listchats komut hatası:", err)
-      bot.sendMessage(msg.chat.id, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
+      return
     }
-  })
 
-  // Kullanıcı ID'sini göster
-  bot.onText(/\/myid/, (msg) => {
-    const userId = msg.from?.id
-    const username = msg.from?.username
+    // UpdateChats komutu
+    if (text === "/updatechats") {
+      try {
+        // Kullanıcının admin olup olmadığını kontrol et
+        const { data: adminUser, error } = await supabaseAdmin
+          .from("admin_users")
+          .select("*")
+          .eq("user_id", userId)
+          .single()
 
-    bot.sendMessage(msg.chat.id, `Kullanıcı ID'niz: ${userId}\nKullanıcı adınız: @${username || "yok"}`)
-  })
+        console.log("Admin kontrolü sonucu:", { adminUser, error })
 
-  // Start komutu
-  bot.onText(/\/start/, (msg) => {
-    const userId = msg.from?.id
-    const firstName = msg.from?.first_name
+        if (error || !adminUser) {
+          console.log("Admin değil, yetki hatası")
+          await bot?.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
+          return
+        }
 
-    const message = `Merhaba ${firstName}! 👋\n\nBen bir hoş geldin botuyum. Gruplara eklendiğimde, yeni katılan üyelere hoş geldin mesajı gönderirim.\n\nKomutlar:\n/myid - Kullanıcı ID'nizi gösterir\n/setmessage [mesaj] - Duyuru mesajını ayarlar\n/showmessage - Mevcut duyuru mesajını gösterir\n/listchats - Botun eklendiği grupları listeler\n/updatechats - Grup listesini günceller`
+        // Botun üye olduğu tüm grupları güncelle
+        await updateAllBotChats()
+        await bot?.sendMessage(chatId, "Gruplar başarıyla güncellendi!")
+      } catch (error) {
+        console.error("Grupları güncelleme hatası:", error)
+        await bot?.sendMessage(chatId, "Grupları güncellerken bir hata oluştu.")
+      }
+      return
+    }
 
-    bot.sendMessage(msg.chat.id, message)
-  })
+    // ListChats komutu
+    if (text === "/listchats") {
+      try {
+        // Kullanıcının admin olup olmadığını kontrol et
+        const { data: adminUser, error } = await supabaseAdmin
+          .from("admin_users")
+          .select("*")
+          .eq("user_id", userId)
+          .single()
 
-  console.log("Telegram bot başlatıldı!")
-  return bot
+        console.log("Admin kontrolü sonucu:", { adminUser, error })
+
+        if (error || !adminUser) {
+          console.log("Admin değil, yetki hatası")
+          await bot?.sendMessage(chatId, "Bu komutu kullanma yetkiniz yok!")
+          return
+        }
+
+        // Botun üye olduğu grupları al
+        const { data: chats, error: fetchError } = await supabaseAdmin
+          .from("bot_chats")
+          .select("*")
+          .order("chat_title", { ascending: true })
+
+        if (fetchError) {
+          console.error("Grupları listeleme hatası:", fetchError)
+          await bot?.sendMessage(chatId, "Grupları listelerken bir hata oluştu.")
+          return
+        }
+
+        if (!chats || chats.length === 0) {
+          await bot?.sendMessage(chatId, "Bot henüz hiçbir gruba eklenmemiş.")
+          return
+        }
+
+        // Grup listesini oluştur
+        let message = "Bot aşağıdaki gruplara eklenmiş:\n\n"
+        chats.forEach((chat, index) => {
+          message += `${index + 1}. ${chat.chat_title || "İsimsiz"} (${chat.chat_id})\n`
+          message += `   Tür: ${chat.chat_type}, Admin: ${chat.is_admin ? "Evet" : "Hayır"}\n`
+          if (chat.member_count) message += `   Üye sayısı: ${chat.member_count}\n`
+          message += "\n"
+        })
+
+        await bot?.sendMessage(chatId, message)
+      } catch (err) {
+        console.error("listchats komut hatası:", err)
+        await bot?.sendMessage(chatId, "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
+      }
+      return
+    }
+  } catch (error) {
+    console.error("Komut işleme hatası:", error)
+  }
 }
 
 // Grup bilgilerini güncelle
@@ -440,40 +431,6 @@ async function updateAllBotChats() {
       console.log("Veritabanında hiç grup yok")
     }
 
-    // Botun üye olduğu tüm grupları manuel olarak kontrol et
-    try {
-      if (bot) {
-        const botInfo = await bot.getMe()
-        console.log("Bot bilgileri:", botInfo)
-
-        // Botun üye olduğu grupları getUpdates ile kontrol et
-        const updates = await bot.getUpdates(0, 100, -1)
-        console.log("Bot güncellemeleri:", updates)
-
-        // Güncellemelerden grup bilgilerini çıkar
-        const chatIds = new Set<number>()
-        updates.forEach((update) => {
-          if (update.message?.chat?.id && update.message.chat.type !== "private") {
-            chatIds.add(update.message.chat.id)
-          }
-        })
-
-        console.log("Tespit edilen grup ID'leri:", Array.from(chatIds))
-
-        // Her grup için bilgileri güncelle
-        for (const chatId of chatIds) {
-          try {
-            const chatInfo = await bot.getChat(chatId)
-            await updateBotChat(chatInfo)
-          } catch (error) {
-            console.error(`Grup bilgilerini alma hatası (${chatId}):`, error)
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Bot güncellemelerini alma hatası:", error)
-    }
-
     return true
   } catch (error) {
     console.error("Tüm grupları güncelleme hatası:", error)
@@ -484,7 +441,6 @@ async function updateAllBotChats() {
 // Botu durdur
 export function stopBot() {
   if (bot) {
-    bot.stopPolling()
     bot = null
     console.log("Telegram bot durduruldu!")
   }
