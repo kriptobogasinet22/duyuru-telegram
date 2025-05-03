@@ -5,14 +5,27 @@ export async function GET() {
   try {
     console.log("Bot grupları yükleniyor...")
 
-    // Bot gruplarını yükle
-    const { data, error } = await supabaseAdmin.from("bot_chats").select("*").order("chat_title", { ascending: true })
+    // Daha detaylı log ekleyelim
+    const { data: allChats, error: countError } = await supabaseAdmin.from("bot_chats").select("*")
+    console.log(`Veritabanında toplam ${allChats?.length || 0} adet bot grubu var`)
+
+    // Tüm bot gruplarını yükle - herhangi bir filtreleme olmadan
+    const { data, error } = await supabaseAdmin.from("bot_chats").select("*").order("updated_at", { ascending: false }) // En son güncellenenler önce gelsin
 
     if (error) {
       console.error("Bot grupları yükleme hatası:", error)
       return NextResponse.json({
         success: false,
         error: error.message,
+      })
+    }
+
+    // Her bir grup için detaylı log
+    if (data && data.length > 0) {
+      data.forEach((chat) => {
+        console.log(
+          `Grup: ${chat.chat_id}, Başlık: ${chat.chat_title}, Tür: ${chat.chat_type}, Admin: ${chat.is_admin}`,
+        )
       })
     }
 
