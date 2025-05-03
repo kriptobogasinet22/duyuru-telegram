@@ -85,10 +85,118 @@ export async function processUpdate(update: any) {
       }
     }
 
+    // Kanal sohbeti üye güncellemelerini işle (yeni üye katıldı)
+    if (update.chat_member) {
+      await handleChatMemberUpdate(update.chat_member)
+    }
+
+    // Kanal sohbeti üye güncellemelerini işle (yeni üye katıldı)
+    if (update.my_chat_member) {
+      await handleMyChatMemberUpdate(update.my_chat_member)
+    }
+
     return true
   } catch (error) {
     console.error("Update işleme hatası:", error)
     throw error
+  }
+}
+
+// Chat member güncellemelerini işle (yeni üye katıldı)
+async function handleChatMemberUpdate(chatMember: any) {
+  try {
+    console.log("Chat member güncelleme alındı:", JSON.stringify(chatMember))
+
+    // Sadece yeni üye katılma olaylarını işle
+    if (chatMember.new_chat_member && 
+        (chatMember.new_chat_member.status === "member" || 
+         chatMember.new_chat_member.status === "administrator" || 
+         chatMember.new_chat_member.status === "creator") && 
+        chatMember.old_chat_member.status !== chatMember.new_chat_member.status) {
+      
+      const chatId = chatMember.chat.id
+      const chatType = chatMember.chat.type
+      const chatTitle = chatMember.chat.title || ""
+      const userId = chatMember.new_chat_member.user.id
+      const user = chatMember.new_chat_member.user
+
+      // Bot kendisi ise işleme
+      if (user.is_bot && user.username === bot?.options.username) {
+        console.log("Bot kendisi kanala/gruba eklendi, veritabanına kaydediliyor:", chatId, chatTitle)
+        await updateBotChat(chatMember.chat)
+        return
+      }
+
+      // Sohbeti veritabanına kaydet
+      await updateBotChat(chatMember.chat)
+
+      // Bu sohbet için duyuru mesajını al
+      const { data: announcements } = await supabaseAdmin.from("announcements").select("*").eq("chat_id", chatId).single()
+
+      // Eğer duyuru mesajı varsa, yeni üyeye gönder
+      if (announcements) {
+        // Kullanıcı adını al
+        const username = user.username ? `@${user.username}` : user.first_name
+
+        // Mesajı kişiselleştir
+        const personalizedMessage = announcements.message
+          .replace("{username}", username)
+          .replace("{first_name}", user.first_name || "")
+          .replace("{last_name}", user.last_name || "")
+          .replace("{chat_title}", chatTitle)
+
+        try {
+          // Mesajı özelden göndermeyi dene
+          await bot?.sendMessage(userId, personalizedMessage, { parse_mode: "Markdown" })
+          console.log(`Duyuru mesajı ${userId} ID'li kullanıcıya özelden gönderildi (chat_member event)`)
+        } catch (error) {
+          console.error(`Özelden mesaj gönderme hatası (${userId}):`, error)
+          // Hata durumunda sessizce başarısız ol, gruba mesaj gönderme
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Chat member güncelleme hatası:", error)
+  }
+}
+
+// My chat member güncellemelerini işle (bot durumu değişti)
+async function handleMyChatMemberUpdate(myChatMember: any) {
+  try {
+    console.log("My chat member güncelleme alındı:", JSON.stringify(myChatMember))
+
+    // Botun durumu değişti
+    const chatId = myChatMember.chat.id
+    const chatType = myChatMember.chat.type
+    const chatTitle = myChatMember.chat.title || ""
+    const newStatus = myChatMember.new_chat_member.status
+    const oldStatus = myChatMember.old_chat_member.status
+
+    // Bot kanala/gruba eklendi
+    if ((newStatus === "member" || newStatus === "administrator") && 
+        (oldStatus === "left" || oldStatus === "kicked")) {
+      console.log("Bot kanala/gruba eklendi:", chatId, chatTitle)
+      await updateBotChat(myChatMember.chat)
+    }
+    // Bot kanaldan/gruptan çıkarıldı
+    else if ((newStatus === "left" || newStatus === "kicked") && 
+             (oldStatus === "member" || oldStatus === "administrator")) {
+      console.log("Bot kanaldan/gruptan çıkarıldı:", chatId, chatTitle)
+      // Veritabanından sil
+      await supabaseAdmin.from("bot_chats").delete().eq("chat_id", chatId)
+    }
+    // Bot admin yapıldı
+    else if (newStatus === "administrator" && oldStatus !== "administrator") {
+      console.log("Bot admin yapıldı:", chatId, chatTitle)
+      await updateBotChat(myChatMember.chat)
+    }
+    // Bot admin yetkisi alındı
+    else if (oldStatus === "administrator" && newStatus !== "administrator") {
+      console.log("Bot admin yetkisi alındı:", chatId, chatTitle)
+      await updateBotChat(myChatMember.chat)
+    }
+  } catch (error) {
+    console.error("My chat member güncelleme hatası:", error)
   }
 }
 
@@ -138,20 +246,7 @@ async function handleNewChatMembers(msg: TelegramBot.Message) {
           console.log(`Duyuru mesajı ${userId} ID'li kullanıcıya özelden gönderildi`)
         } catch (error) {
           console.error(`Özelden mesaj gönderme hatası (${userId}):`, error)
-
-          // Gruba hoş geldin mesajı gönder (alternatif çözüm)
-          // Kullanıcıyı etiketleyerek gruba mesaj gönder
-          const welcomeMessage = `Hoş geldin ${username}! 👋\n\nGruba katıldığın için teşekkürler. Özel duyurular için benimle özel sohbet başlatabilirsin. Bunun için bana tıkla ve /start yaz.`
-
-          try {
-            await bot?.sendMessage(chatId, welcomeMessage, {
-              reply_to_message_id: msg.message_id, // Katılma mesajını yanıtla
-              parse_mode: "Markdown",
-            })
-          } catch (replyError) {
-            console.error("Gruba yanıt gönderme hatası:", replyError)
-            // Burada sessizce başarısız ol, gruba hata mesajı gönderme
-          }
+          // Hata durumunda sessizce başarısız ol, gruba mesaj gönderme
         }
       }
     }
@@ -579,3 +674,4 @@ export function stopBot() {
     console.log("Telegram bot durduruldu!")
   }
 }
+
