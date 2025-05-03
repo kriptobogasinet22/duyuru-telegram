@@ -22,8 +22,17 @@ export async function GET() {
       // Önce mevcut webhook'u temizle
       await bot.deleteWebHook()
 
-      // Sonra yeni webhook'u ayarla
-      const result = await bot.setWebHook(webhookUrl)
+      // Sonra yeni webhook'u ayarla - ÖNEMLİ: chat_join_request olayını da dinle
+      const result = await bot.setWebHook(webhookUrl, {
+        allowed_updates: [
+          "message",
+          "edited_message",
+          "channel_post",
+          "edited_channel_post",
+          "callback_query",
+          "chat_join_request",
+        ],
+      })
 
       // Webhook bilgilerini al
       const webhookInfo = await bot.getWebHookInfo()
