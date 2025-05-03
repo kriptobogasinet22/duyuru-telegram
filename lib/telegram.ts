@@ -109,6 +109,7 @@ async function handleNewChatMembers(msg: TelegramBot.Message) {
     if (botUser) {
       console.log("Bot gruba eklendi, veritabanına kaydediliyor:", chatId, chatTitle)
       await updateBotChat(msg.chat)
+      return // Bot kendisi eklendiyse, diğer işlemleri yapma
     }
 
     // Bu sohbet için duyuru mesajını al
@@ -118,10 +119,11 @@ async function handleNewChatMembers(msg: TelegramBot.Message) {
     if (announcements) {
       for (const member of newMembers) {
         // Bot kendisi ise atla
-        if (member.is_bot && member.username === bot?.options.username) continue
+        if (member.is_bot) continue
 
         // Kullanıcı adını al
         const username = member.username ? `@${member.username}` : member.first_name
+        const userId = member.id
 
         // Mesajı kişiselleştir
         const personalizedMessage = announcements.message
@@ -131,25 +133,31 @@ async function handleNewChatMembers(msg: TelegramBot.Message) {
           .replace("{chat_title}", chatTitle)
 
         try {
-          // Mesajı özelden gönder
-          await bot?.sendMessage(member.id, personalizedMessage, { parse_mode: "Markdown" })
-          console.log(`Duyuru mesajı ${member.id} ID'li kullanıcıya özelden gönderildi`)
-
-          // Gruba bilgi mesajı gönder (isteğe bağlı)
-          // await bot?.sendMessage(chatId, `${username} kullanıcısına hoş geldin mesajı gönderildi.`)
+          // Mesajı özelden göndermeyi dene
+          await bot?.sendMessage(userId, personalizedMessage, { parse_mode: "Markdown" })
+          console.log(`Duyuru mesajı ${userId} ID'li kullanıcıya özelden gönderildi`)
         } catch (error) {
-          console.error(`Özelden mesaj gönderme hatası (${member.id}):`, error)
+          console.error(`Özelden mesaj gönderme hatası (${userId}):`, error)
 
-          // Eğer özelden mesaj gönderilemezse, gruba bilgi mesajı gönder
-          await bot?.sendMessage(
-            chatId,
-            `${username} kullanıcısına özelden mesaj gönderilemedi. Kullanıcının botu engellememiş olduğundan emin olun.`,
-          )
+          // Gruba hoş geldin mesajı gönder (alternatif çözüm)
+          // Kullanıcıyı etiketleyerek gruba mesaj gönder
+          const welcomeMessage = `Hoş geldin ${username}! 👋\n\nGruba katıldığın için teşekkürler. Özel duyurular için benimle özel sohbet başlatabilirsin. Bunun için bana tıkla ve /start yaz.`
+
+          try {
+            await bot?.sendMessage(chatId, welcomeMessage, {
+              reply_to_message_id: msg.message_id, // Katılma mesajını yanıtla
+              parse_mode: "Markdown",
+            })
+          } catch (replyError) {
+            console.error("Gruba yanıt gönderme hatası:", replyError)
+            // Burada sessizce başarısız ol, gruba hata mesajı gönderme
+          }
         }
       }
     }
   } catch (error) {
     console.error("Yeni üye işleme hatası:", error)
+    // Hata durumunda sessizce başarısız ol, gruba hata mesajı gönderme
   }
 }
 
