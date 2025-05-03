@@ -9,6 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogClose,
 } from "@/components/ui/dialog"
 
 interface DeleteConfirmationProps {
@@ -47,7 +48,8 @@ export function DeleteConfirmation({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent>
+        <DialogClose onClick={onClose} />
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
