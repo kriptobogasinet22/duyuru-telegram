@@ -21,10 +21,10 @@ export async function POST(req: NextRequest) {
   try {
     // Telegram'dan gelen webhook verilerini al
     const update = await req.json()
-    
+
     // Debug için log ekleyin
     console.log("Webhook update alındı:", JSON.stringify(update))
-    
+
     // Güncellemeyi bot'a ilet
     await bot.processUpdate(update)
 
