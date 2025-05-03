@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RefreshCw, Plus, Edit, Trash } from "lucide-react"
 import { AnnouncementForm } from "@/components/announcement-form"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
+// Mevcut importlara ekle
+import { Input } from "@/components/ui/input"
 
 export default function FullAdminPage() {
   const [loading, setLoading] = useState(true)
@@ -25,6 +27,10 @@ export default function FullAdminPage() {
   // Silme onayı state'leri
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false)
   const [announcementToDelete, setAnnouncementToDelete] = useState<any>(null)
+
+  // State'lere ekle
+  const [manualChatId, setManualChatId] = useState("")
+  const [addingChat, setAddingChat] = useState(false)
 
   // Verileri yükle
   useEffect(() => {
@@ -81,6 +87,8 @@ export default function FullAdminPage() {
   // Bot gruplarını yükle
   async function loadBotChats() {
     try {
+      setError(null) // Önceki hataları temizle
+
       const botChatsResponse = await fetch("/api/bot-chats")
       const botChatsResult = await botChatsResponse.json()
 
@@ -90,10 +98,26 @@ export default function FullAdminPage() {
         throw new Error(`Bot grupları yüklenirken hata: ${botChatsResult.error}`)
       }
 
-      setBotChats(botChatsResult.data || [])
-      return botChatsResult.data || []
+      // Veri yoksa veya boşsa
+      if (!botChatsResult.data || botChatsResult.data.length === 0) {
+        console.log("Hiç bot grubu bulunamadı, grupları yenilemeyi deneyin")
+        setBotChats([])
+        return []
+      }
+
+      // Verileri set et
+      setBotChats(botChatsResult.data)
+
+      // Detaylı log
+      console.log(
+        `${botChatsResult.data.length} adet bot grubu yüklendi:`,
+        botChatsResult.data.map((c) => `${c.chat_title || c.chat_id} (${c.chat_type})`),
+      )
+
+      return botChatsResult.data
     } catch (err) {
       console.error("Bot grupları yükleme hatası:", err)
+      setError(`Bot grupları yüklenirken hata oluştu: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
       throw err
     }
   }
@@ -221,6 +245,44 @@ export default function FullAdminPage() {
   function openDeleteConfirmationModal(announcement: any) {
     setAnnouncementToDelete(announcement)
     setIsDeleteConfirmationOpen(true)
+  }
+
+  // Yeni fonksiyon ekle
+  async function handleAddChatManually() {
+    if (!manualChatId || isNaN(Number(manualChatId))) {
+      alert("Lütfen geçerli bir chat ID girin")
+      return
+    }
+
+    try {
+      setAddingChat(true)
+      setError(null)
+
+      const response = await fetch("/api/add-chat-manually", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ chat_id: manualChatId }),
+      })
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(`Grup eklenirken hata: ${result.error}`)
+      }
+
+      // Grupları yenile
+      await loadBotChats()
+      setManualChatId("")
+      alert(`Grup başarıyla eklendi: ${result.chat.chat_title || result.chat.chat_id}`)
+    } catch (err) {
+      console.error("Grup ekleme hatası:", err)
+      setError(`Grup eklenirken hata oluştu: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
+      alert(`Hata: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
+    } finally {
+      setAddingChat(false)
+    }
   }
 
   return (
@@ -385,6 +447,30 @@ export default function FullAdminPage() {
                     })}
                   </div>
                 )}
+                {/* Aşağıdaki kodu TabsContent value="bot-chats" içindeki CardContent'in sonuna ekle */}
+                <div className="mt-6 border-t pt-4">
+                  <h3 className="text-lg font-medium mb-2">Manuel Grup Ekleme</h3>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Eğer bir grup listede görünmüyorsa, grup ID'sini girerek manuel olarak ekleyebilirsiniz.
+                  </p>
+
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={manualChatId}
+                      onChange={(e) => setManualChatId(e.target.value)}
+                      placeholder="Grup/Kanal ID (örn: -1001234567890)"
+                      className="max-w-xs"
+                    />
+                    <Button onClick={handleAddChatManually} disabled={addingChat || !manualChatId} variant="outline">
+                      {addingChat ? "Ekleniyor..." : "Grup Ekle"}
+                    </Button>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    Not: Grup ID'sini öğrenmek için grupta /chatinfo komutunu kullanabilirsiniz.
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
