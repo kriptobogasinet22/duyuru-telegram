@@ -269,11 +269,7 @@ export default function FullAdminPage() {
                             <p className="text-sm text-gray-500">ID: {announcement.chat_id}</p>
                           </div>
                           <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openEditAnnouncementModal(announcement)}
-                            >
+                            <Button variant="outline" size="sm" onClick={() => openEditAnnouncementModal(announcement)}>
                               <Edit className="h-4 w-4 mr-1" />
                               Düzenle
                             </Button>
@@ -362,12 +358,13 @@ export default function FullAdminPage() {
                                 )}
                               </div>
                             </div>
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               size="sm"
-                              onClick={() => hasAnnouncement
-                                ? openEditAnnouncementModal(announcements.find(a => a.chat_id === chat.chat_id))
-                                : openAddAnnouncementModal(chat)
+                              onClick={() =>
+                                hasAnnouncement
+                                  ? openEditAnnouncementModal(announcements.find((a) => a.chat_id === chat.chat_id))
+                                  : openAddAnnouncementModal(chat)
                               }
                             >
                               {hasAnnouncement ? (
@@ -460,5 +457,5 @@ export default function FullAdminPage() {
         itemName={announcementToDelete?.chat_title || `Sohbet #${announcementToDelete?.chat_id}`}
       />
     </div>
+  )
 }
-}\
