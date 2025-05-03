@@ -10,6 +10,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogClose,
 } from "@/components/ui/dialog"
 
 interface AnnouncementFormProps {
@@ -56,7 +57,8 @@ export function AnnouncementForm({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent>
+        <DialogClose onClick={onClose} />
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
