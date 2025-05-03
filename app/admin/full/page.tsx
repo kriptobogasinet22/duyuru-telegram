@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw } from 'lucide-react'
 
 export default function FullAdminPage() {
   const [loading, setLoading] = useState(true)
@@ -79,9 +79,15 @@ export default function FullAdminPage() {
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="announcements">Duyurular ({announcements.length})</TabsTrigger>
-            <TabsTrigger value="bot-chats">Bot Grupları ({botChats.length})</TabsTrigger>
-            <TabsTrigger value="admin-users">Admin Kullanıcıları ({adminUsers.length})</TabsTrigger>
+            <TabsTrigger value="announcements" onValueChange={setActiveTab}>
+              Duyurular ({announcements.length})
+            </TabsTrigger>
+            <TabsTrigger value="bot-chats" onValueChange={setActiveTab}>
+              Bot Grupları ({botChats.length})
+            </TabsTrigger>
+            <TabsTrigger value="admin-users" onValueChange={setActiveTab}>
+              Admin Kullanıcıları ({adminUsers.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="announcements">
