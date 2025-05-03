@@ -12,8 +12,19 @@ export function initBot() {
   if (bot) return bot
 
   // Webhook modunda çalışacak şekilde botu başlat
-  bot = new TelegramBot(token, { polling: false })
+bot = new TelegramBot(token, { 
+  polling: false // Webhook modu için false olmalı
+});
 
+// Webhook URL'ini ayarla
+if (process.env.VERCEL_URL) {
+  const webhookUrl = `https://${process.env.VERCEL_URL}/api/webhook`;
+  bot.setWebHook(webhookUrl).then(() => {
+    console.log(`Webhook set to ${webhookUrl}`);
+  }).catch(err => {
+    console.error('Failed to set webhook:', err);
+  });
+}
   // Yeni üye katıldığında
   bot.on("new_chat_members", async (msg) => {
     const chatId = msg.chat.id
