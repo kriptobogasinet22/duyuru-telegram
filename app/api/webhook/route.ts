@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { initBot } from "@/lib/telegram"
+import { initBot, processUpdate } from "@/lib/telegram"
 
 // Global bot örneği
 let botInitialized = false
@@ -15,18 +15,18 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  // Botu başlat
-  const bot = initBot()
-
   try {
+    // Botu başlat
+    initBot()
+
     // Telegram'dan gelen webhook verilerini al
     const update = await req.json()
 
     // Debug için log ekleyin
     console.log("Webhook update alındı:", JSON.stringify(update))
 
-    // Güncellemeyi bot'a ilet
-    await bot.processUpdate(update)
+    // Güncellemeyi işle
+    await processUpdate(update)
 
     return NextResponse.json({ status: "ok" })
   } catch (error) {
