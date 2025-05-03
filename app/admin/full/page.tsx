@@ -4,7 +4,9 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, Plus, Edit, Trash } from "lucide-react"
+import { AnnouncementForm } from "@/components/announcement-form"
+import { DeleteConfirmation } from "@/components/delete-confirmation"
 
 export default function FullAdminPage() {
   const [loading, setLoading] = useState(true)
@@ -14,6 +16,15 @@ export default function FullAdminPage() {
   const [announcements, setAnnouncements] = useState<any[]>([])
   const [botChats, setBotChats] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState("bot-chats") // Varsayılan olarak bot-chats sekmesini göster
+
+  // Duyuru formu state'leri
+  const [isAnnouncementFormOpen, setIsAnnouncementFormOpen] = useState(false)
+  const [currentAnnouncement, setCurrentAnnouncement] = useState<any>(null)
+  const [currentChat, setCurrentChat] = useState<any>(null)
+
+  // Silme onayı state'leri
+  const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false)
+  const [announcementToDelete, setAnnouncementToDelete] = useState<any>(null)
 
   // Verileri yükle
   useEffect(() => {
@@ -37,14 +48,7 @@ export default function FullAdminPage() {
       setAdminUsers(adminResult.data || [])
 
       // Duyuruları yükle
-      const announcementsResponse = await fetch("/api/announcements")
-      const announcementsResult = await announcementsResponse.json()
-
-      if (!announcementsResult.success) {
-        throw new Error(`Duyurular yüklenirken hata: ${announcementsResult.error}`)
-      }
-
-      setAnnouncements(announcementsResult.data || [])
+      await loadAnnouncements()
 
       // Bot gruplarını yükle
       await loadBotChats()
@@ -53,6 +57,24 @@ export default function FullAdminPage() {
       setError(`Veri yükleme hatası: ${err instanceof Error ? err.message : "Bilinmeyen hata"}`)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Duyuruları yükle
+  async function loadAnnouncements() {
+    try {
+      const announcementsResponse = await fetch("/api/announcements")
+      const announcementsResult = await announcementsResponse.json()
+
+      if (!announcementsResult.success) {
+        throw new Error(`Duyurular yüklenirken hata: ${announcementsResult.error}`)
+      }
+
+      setAnnouncements(announcementsResult.data || [])
+      return announcementsResult.data || []
+    } catch (err) {
+      console.error("Duyurular yükleme hatası:", err)
+      throw err
     }
   }
 
@@ -92,6 +114,8 @@ export default function FullAdminPage() {
 
       // Sonra güncel grupları yükle
       await loadBotChats()
+      // Duyuruları da yenile
+      await loadAnnouncements()
 
       // Başarı mesajı
       alert("Gruplar başarıyla yenilendi!")
@@ -102,6 +126,101 @@ export default function FullAdminPage() {
     } finally {
       setRefreshing(false)
     }
+  }
+
+  // Duyuru ekle veya düzenle
+  async function handleAnnouncementSubmit(message: string) {
+    try {
+      if (currentAnnouncement) {
+        // Duyuru düzenleme
+        const response = await fetch(`/api/announcements/${currentAnnouncement.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ message }),
+        })
+
+        const result = await response.json()
+
+        if (!result.success) {
+          throw new Error(`Duyuru güncellenirken hata: ${result.error}`)
+        }
+
+        // Duyuruları yenile
+        await loadAnnouncements()
+        alert("Duyuru başarıyla güncellendi!")
+      } else if (currentChat) {
+        // Yeni duyuru ekleme
+        const response = await fetch("/api/announcements", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            chat_id: currentChat.chat_id,
+            message,
+          }),
+        })
+
+        const result = await response.json()
+
+        if (!result.success) {
+          throw new Error(`Duyuru eklenirken hata: ${result.error}`)
+        }
+
+        // Duyuruları yenile
+        await loadAnnouncements()
+        alert("Duyuru başarıyla eklendi!")
+      }
+    } catch (err) {
+      console.error("Duyuru işlemi hatası:", err)
+      throw err
+    }
+  }
+
+  // Duyuru silme
+  async function handleAnnouncementDelete() {
+    try {
+      if (!announcementToDelete) return
+
+      const response = await fetch(`/api/announcements/${announcementToDelete.id}`, {
+        method: "DELETE",
+      })
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(`Duyuru silinirken hata: ${result.error}`)
+      }
+
+      // Duyuruları yenile
+      await loadAnnouncements()
+      alert("Duyuru başarıyla silindi!")
+    } catch (err) {
+      console.error("Duyuru silme hatası:", err)
+      throw err
+    }
+  }
+
+  // Duyuru düzenleme modalını aç
+  function openEditAnnouncementModal(announcement: any) {
+    setCurrentAnnouncement(announcement)
+    setCurrentChat(null)
+    setIsAnnouncementFormOpen(true)
+  }
+
+  // Duyuru ekleme modalını aç
+  function openAddAnnouncementModal(chat: any) {
+    setCurrentAnnouncement(null)
+    setCurrentChat(chat)
+    setIsAnnouncementFormOpen(true)
+  }
+
+  // Duyuru silme onayı modalını aç
+  function openDeleteConfirmationModal(announcement: any) {
+    setAnnouncementToDelete(announcement)
+    setIsDeleteConfirmationOpen(true)
   }
 
   return (
@@ -149,9 +268,24 @@ export default function FullAdminPage() {
                             </h3>
                             <p className="text-sm text-gray-500">ID: {announcement.chat_id}</p>
                           </div>
-                          <Button variant="destructive" size="sm">
-                            Sil
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditAnnouncementModal(announcement)}
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Düzenle
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => openDeleteConfirmationModal(announcement)}
+                            >
+                              <Trash className="h-4 w-4 mr-1" />
+                              Sil
+                            </Button>
+                          </div>
                         </div>
                         <p className="whitespace-pre-wrap">{announcement.message}</p>
                         <p className="text-xs text-gray-500 mt-2">
@@ -228,8 +362,25 @@ export default function FullAdminPage() {
                                 )}
                               </div>
                             </div>
-                            <Button variant="outline" size="sm">
-                              {hasAnnouncement ? "Duyuruyu Düzenle" : "Duyuru Ekle"}
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => hasAnnouncement
+                                ? openEditAnnouncementModal(announcements.find(a => a.chat_id === chat.chat_id))
+                                : openAddAnnouncementModal(chat)
+                              }
+                            >
+                              {hasAnnouncement ? (
+                                <>
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Duyuruyu Düzenle
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  Duyuru Ekle
+                                </>
+                              )}
                             </Button>
                           </div>
                         </div>
@@ -260,6 +411,7 @@ export default function FullAdminPage() {
                             <p className="text-sm text-gray-500">ID: {user.user_id}</p>
                           </div>
                           <Button variant="destructive" size="sm">
+                            <Trash className="h-4 w-4 mr-1" />
                             Sil
                           </Button>
                         </div>
@@ -278,6 +430,35 @@ export default function FullAdminPage() {
           Teşhis Sayfasına Dön
         </Button>
       </div>
+
+      {/* Duyuru Formu Modal */}
+      <AnnouncementForm
+        isOpen={isAnnouncementFormOpen}
+        onClose={() => setIsAnnouncementFormOpen(false)}
+        onSubmit={handleAnnouncementSubmit}
+        initialMessage={currentAnnouncement?.message || ""}
+        title={currentAnnouncement ? "Duyuru Düzenle" : "Duyuru Ekle"}
+        description={
+          currentAnnouncement
+            ? "Bu duyuru mesajını düzenleyin. Bu mesaj, gruba/kanala katılan yeni üyelere gönderilecektir."
+            : "Yeni bir duyuru mesajı ekleyin. Bu mesaj, gruba/kanala katılan yeni üyelere gönderilecektir."
+        }
+        chatTitle={
+          currentAnnouncement
+            ? currentAnnouncement.chat_title || `Sohbet #${currentAnnouncement.chat_id}`
+            : currentChat?.chat_title || `Sohbet #${currentChat?.chat_id}`
+        }
+      />
+
+      {/* Duyuru Silme Onayı Modal */}
+      <DeleteConfirmation
+        isOpen={isDeleteConfirmationOpen}
+        onClose={() => setIsDeleteConfirmationOpen(false)}
+        onConfirm={handleAnnouncementDelete}
+        title="Duyuruyu Sil"
+        description="Bu duyuruyu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
+        itemName={announcementToDelete?.chat_title || `Sohbet #${announcementToDelete?.chat_id}`}
+      />
     </div>
-  )
 }
+}\
