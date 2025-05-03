@@ -1,9 +1,9 @@
 import { createClient } from "@supabase/supabase-js"
 
 // Supabase istemcisini oluştur
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 
 // Ortam değişkenlerini kontrol et
 if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
@@ -15,10 +15,20 @@ if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
 }
 
 // Anonim istemci (client-side için)
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false, // Oturum bilgilerini saklamayı devre dışı bırak
+    autoRefreshToken: false, // Token yenilemeyi devre dışı bırak
+  },
+})
 
 // Servis rolü istemcisi (server-side için)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    persistSession: false, // Oturum bilgilerini saklamayı devre dışı bırak
+    autoRefreshToken: false, // Token yenilemeyi devre dışı bırak
+  },
+})
 
 // Tip tanımlamaları
 export type Announcement = {
